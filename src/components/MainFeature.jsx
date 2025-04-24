@@ -11,15 +11,17 @@ import {
   Edit3,
   X,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Loader
 } from "lucide-react";
+import { fetchTasks, createTask, updateTask, deleteTask } from "../services/apperService";
 
 const MainFeature = ({ onTasksUpdate }) => {
   // Task states
-  const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem("tasks");
-    return savedTasks ? JSON.parse(savedTasks) : [];
-  });
+  const [tasks, setTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [newTask, setNewTask] = useState({
     title: "",
@@ -34,13 +36,28 @@ const MainFeature = ({ onTasksUpdate }) => {
   const [showForm, setShowForm] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   
-  // Save tasks to localStorage and update parent component
+  // Load tasks from the backend
   useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-    if (onTasksUpdate) {
-      onTasksUpdate(tasks);
-    }
-  }, [tasks, onTasksUpdate]);
+    const loadTasks = async () => {
+      try {
+        setIsLoading(true);
+        const tasksData = await fetchTasks();
+        setTasks(tasksData);
+        setIsLoading(false);
+        
+        // Update parent component with tasks data
+        if (onTasksUpdate) {
+          onTasksUpdate(tasksData);
+        }
+      } catch (error) {
+        console.error("Failed to load tasks:", error);
+        setError("Failed to load your tasks. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+    
+    loadTasks();
+  }, [onTasksUpdate]);
   
   // Handle input changes for new task
   const handleInputChange = (e) => {
@@ -70,46 +87,90 @@ const MainFeature = ({ onTasksUpdate }) => {
   };
   
   // Add new task
-  const addTask = (e) => {
+  const addTask = async (e) => {
     e.preventDefault();
     
     if (!validateForm()) {
       return;
     }
     
-    const task = {
-      id: Date.now().toString(),
-      ...newTask,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    setTasks(prev => [...prev, task]);
-    setNewTask({
-      title: "",
-      description: "",
-      dueDate: "",
-      priority: "MEDIUM",
-      status: "TODO"
-    });
-    setShowForm(false);
-    setFormErrors({});
+    try {
+      setIsSubmitting(true);
+      
+      const taskData = {
+        ...newTask,
+      };
+      
+      const createdTask = await createTask(taskData);
+      
+      // Update tasks state with the new task from the backend
+      setTasks(prev => [...prev, createdTask]);
+      
+      // Reset form
+      setNewTask({
+        title: "",
+        description: "",
+        dueDate: "",
+        priority: "MEDIUM",
+        status: "TODO"
+      });
+      setShowForm(false);
+      setFormErrors({});
+      
+      // Update parent component
+      if (onTasksUpdate) {
+        onTasksUpdate([...tasks, createdTask]);
+      }
+    } catch (error) {
+      console.error("Error creating task:", error);
+      setFormErrors({ submit: "Failed to create task. Please try again." });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   // Delete task
-  const deleteTask = (id) => {
-    setTasks(prev => prev.filter(task => task.id !== id));
+  const deleteTaskHandler = async (id) => {
+    try {
+      await deleteTask(id);
+      
+      // Update local state
+      const updatedTasks = tasks.filter(task => task.id !== id);
+      setTasks(updatedTasks);
+      
+      // Update parent component
+      if (onTasksUpdate) {
+        onTasksUpdate(updatedTasks);
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   };
   
   // Update task status
-  const updateTaskStatus = (id, status) => {
-    setTasks(prev => 
-      prev.map(task => 
-        task.id === id 
-          ? { ...task, status, updatedAt: new Date().toISOString() } 
-          : task
-      )
-    );
+  const updateTaskStatus = async (id, status) => {
+    try {
+      // Find the task to update
+      const taskToUpdate = tasks.find(task => task.id === id);
+      if (!taskToUpdate) return;
+      
+      // Update the task through the backend
+      const updatedTask = await updateTask(id, { ...taskToUpdate, status });
+      
+      // Update local state
+      const updatedTasks = tasks.map(task => 
+        task.id === id ? updatedTask : task
+      );
+      
+      setTasks(updatedTasks);
+      
+      // Update parent component
+      if (onTasksUpdate) {
+        onTasksUpdate(updatedTasks);
+      }
+    } catch (error) {
+      console.error("Error updating task status:", error);
+    }
   };
   
   // Start editing task
@@ -123,20 +184,31 @@ const MainFeature = ({ onTasksUpdate }) => {
   };
   
   // Save edited task
-  const saveEditedTask = () => {
+  const saveEditedTask = async () => {
     if (!editingTask.title.trim()) {
       return;
     }
     
-    setTasks(prev => 
-      prev.map(task => 
-        task.id === editingTask.id 
-          ? { ...editingTask, updatedAt: new Date().toISOString() } 
-          : task
-      )
-    );
-    
-    setEditingTask(null);
+    try {
+      // Update the task through the backend
+      const updatedTask = await updateTask(editingTask.id, editingTask);
+      
+      // Update local state
+      const updatedTasks = tasks.map(task => 
+        task.id === editingTask.id ? updatedTask : task
+      );
+      
+      setTasks(updatedTasks);
+      
+      // Update parent component
+      if (onTasksUpdate) {
+        onTasksUpdate(updatedTasks);
+      }
+      
+      setEditingTask(null);
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
   };
   
   // Handle input changes for editing task
@@ -196,6 +268,30 @@ const MainFeature = ({ onTasksUpdate }) => {
     today.setHours(0, 0, 0, 0);
     return dueDate < today;
   };
+
+  if (isLoading) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="w-12 h-12 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+        <p className="mt-4 text-surface-600 dark:text-surface-300">Loading your tasks...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center text-red-500">
+        <AlertTriangle size={48} className="mx-auto mb-4" />
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 btn-primary"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -343,15 +439,32 @@ const MainFeature = ({ onTasksUpdate }) => {
                   </div>
                 </div>
                 
+                {formErrors.submit && (
+                  <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md text-sm flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    {formErrors.submit}
+                  </div>
+                )}
+                
                 <div className="flex justify-end">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     type="submit"
                     className="btn-primary"
+                    disabled={isSubmitting}
                   >
-                    <Plus size={18} />
-                    Create Task
+                    {isSubmitting ? (
+                      <>
+                        <Loader size={18} className="animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={18} />
+                        Create Task
+                      </>
+                    )}
                   </motion.button>
                 </div>
               </form>
@@ -523,7 +636,7 @@ const MainFeature = ({ onTasksUpdate }) => {
                         </button>
                         
                         <button
-                          onClick={() => deleteTask(task.id)}
+                          onClick={() => deleteTaskHandler(task.id)}
                           className="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-surface-500 hover:text-red-600 dark:text-surface-400 dark:hover:text-red-400 transition-colors"
                           aria-label="Delete task"
                         >

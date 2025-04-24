@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import MainFeature from "../components/MainFeature";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { fetchTasks } from "../services/apperService";
 
 const Home = () => {
   const [stats, setStats] = useState({
@@ -11,6 +12,34 @@ const Home = () => {
   });
   
   const [showWelcome, setShowWelcome] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Initial data loading
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        setIsLoading(true);
+        const tasksData = await fetchTasks();
+        
+        // Update stats based on fetched tasks
+        updateStats(tasksData);
+        
+        // Hide welcome message if user has tasks
+        if (tasksData.length > 0 && showWelcome) {
+          setShowWelcome(false);
+        }
+        
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to load tasks:", error);
+        setError("Failed to load your tasks. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+    
+    loadTasks();
+  }, []);
   
   // Update stats when tasks change
   const updateStats = (tasks) => {
@@ -119,7 +148,25 @@ const Home = () => {
         </motion.div>
       </div>
       
-      <MainFeature onTasksUpdate={handleTasksUpdate} />
+      {isLoading ? (
+        <div className="card p-8 text-center">
+          <div className="w-12 h-12 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+          <p className="mt-4 text-surface-600 dark:text-surface-300">Loading your tasks...</p>
+        </div>
+      ) : error ? (
+        <div className="card p-8 text-center text-red-500">
+          <AlertCircle size={48} className="mx-auto mb-4" />
+          <p>{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 btn-primary"
+          >
+            Try Again
+          </button>
+        </div>
+      ) : (
+        <MainFeature onTasksUpdate={handleTasksUpdate} />
+      )}
     </div>
   );
 };
