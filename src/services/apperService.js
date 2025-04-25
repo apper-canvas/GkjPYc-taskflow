@@ -1,7 +1,7 @@
 // Initialize the ApperClient
 const getApperClient = () => {
   const { ApperClient } = window.ApperSDK;
-  return new ApperClient("YOUR_CANVAS_ID");
+  return new ApperClient("2lnrdYdZQDo5Ys5LY6wm");
 };
 
 // Task-related operations

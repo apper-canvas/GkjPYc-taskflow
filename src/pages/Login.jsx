@@ -10,11 +10,11 @@ const Login = () => {
 
   useEffect(() => {
     const { ApperClient, ApperUI } = window.ApperSDK;
-    const apperClient = new ApperClient("YOUR_CANVAS_ID");
+    const apperClient = new ApperClient("2lnrdYdZQDo5Ys5LY6wm");
     
     ApperUI.setup(apperClient, {
       target: '#authentication',
-      clientId: "YOUR_CANVAS_ID",
+      clientId: "2lnrdYdZQDo5Ys5LY6wm",
       hide: [],
       view: 'login',
       onSuccess: function(user, account) {
